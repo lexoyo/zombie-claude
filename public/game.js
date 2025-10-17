@@ -59,339 +59,313 @@ sunLight.shadow.mapSize.width = 2048;
 sunLight.shadow.mapSize.height = 2048;
 scene.add(sunLight);
 
+// ===== GLTF LOADER =====
+const gltfLoader = new GLTFLoader();
+
 // ===== COLLEGE ENVIRONMENT =====
+let collegeModel = null;
+
+// Créer texture de béton pour les murs
+function createConcreteTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // Base béton avec variations de couleur (beige/gris)
+    const gradient = ctx.createLinearGradient(0, 0, 512, 512);
+    gradient.addColorStop(0, '#c4b8a0');
+    gradient.addColorStop(0.5, '#a8a090');
+    gradient.addColorStop(1, '#b0a898');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Texture granuleuse fine (sable dans le béton)
+    for (let i = 0; i < 10000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const r = 160 + Math.random() * 80;
+        const g = 150 + Math.random() * 70;
+        const b = 130 + Math.random() * 60;
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.2 + Math.random() * 0.3})`;
+        ctx.fillRect(x, y, 1 + Math.random(), 1 + Math.random());
+    }
+
+    // Taches d'humidité et de saleté
+    for (let i = 0; i < 40; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const size = 20 + Math.random() * 60;
+        const gradient2 = ctx.createRadialGradient(x, y, 0, x, y, size);
+        gradient2.addColorStop(0, 'rgba(80, 75, 65, 0.3)');
+        gradient2.addColorStop(0.7, 'rgba(100, 95, 85, 0.15)');
+        gradient2.addColorStop(1, 'rgba(120, 115, 105, 0)');
+        ctx.fillStyle = gradient2;
+        ctx.fillRect(x - size, y - size, size * 2, size * 2);
+    }
+
+    // Fissures dans le béton
+    ctx.strokeStyle = 'rgba(60, 55, 50, 0.6)';
+    ctx.lineWidth = 1 + Math.random();
+    for (let i = 0; i < 20; i++) {
+        ctx.beginPath();
+        const startX = Math.random() * 512;
+        const startY = Math.random() * 512;
+        ctx.moveTo(startX, startY);
+        let currentX = startX;
+        let currentY = startY;
+        for (let j = 0; j < 8; j++) {
+            currentX += (Math.random() - 0.5) * 40;
+            currentY += (Math.random() - 0.5) * 40;
+            ctx.lineTo(currentX, currentY);
+        }
+        ctx.stroke();
+    }
+
+    // Blocs de béton (joints verticaux et horizontaux)
+    ctx.strokeStyle = 'rgba(70, 65, 55, 0.5)';
+    ctx.lineWidth = 3;
+    // Joints horizontaux
+    for (let y = 0; y < 512; y += 128) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(512, y);
+        ctx.stroke();
+    }
+    // Joints verticaux
+    for (let x = 0; x < 512; x += 256) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, 512);
+        ctx.stroke();
+    }
+
+    // Traces de rouille (taches orangées)
+    for (let i = 0; i < 15; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const size = 10 + Math.random() * 25;
+        const gradient3 = ctx.createRadialGradient(x, y, 0, x, y, size);
+        gradient3.addColorStop(0, 'rgba(180, 100, 40, 0.4)');
+        gradient3.addColorStop(0.5, 'rgba(160, 90, 35, 0.2)');
+        gradient3.addColorStop(1, 'rgba(140, 80, 30, 0)');
+        ctx.fillStyle = gradient3;
+        ctx.fillRect(x - size, y - size, size * 2, size * 2);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(2, 2);
+    texture.needsUpdate = true;
+    console.log('✓ Texture béton créée');
+    return texture;
+}
+
+// Créer texture d'asphalte pour le sol
+function createAsphaltTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // Base asphalte avec variations de gris
+    const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 512);
+    gradient.addColorStop(0, '#3a3a3a');
+    gradient.addColorStop(0.5, '#2a2a2a');
+    gradient.addColorStop(1, '#1a1a1a');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Texture très granuleuse (graviers colorés)
+    for (let i = 0; i < 12000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const size = Math.random() * 2.5;
+
+        // Mélange de graviers gris, beiges et blancs
+        const colorType = Math.random();
+        let r, g, b;
+        if (colorType < 0.6) {
+            // Graviers gris foncé
+            const shade = Math.random() * 50;
+            r = g = b = 40 + shade;
+        } else if (colorType < 0.85) {
+            // Graviers beiges/marron
+            r = 80 + Math.random() * 60;
+            g = 70 + Math.random() * 50;
+            b = 50 + Math.random() * 40;
+        } else {
+            // Graviers clairs/blancs
+            const bright = 120 + Math.random() * 80;
+            r = g = b = bright;
+        }
+
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.4 + Math.random() * 0.5})`;
+        ctx.fillRect(x, y, size, size);
+    }
+
+    // Cailloux plus gros et variés
+    for (let i = 0; i < 300; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const size = 2 + Math.random() * 4;
+
+        const colorType = Math.random();
+        if (colorType < 0.5) {
+            ctx.fillStyle = `rgba(${60 + Math.random() * 40}, ${60 + Math.random() * 40}, ${60 + Math.random() * 40}, 0.6)`;
+        } else if (colorType < 0.8) {
+            ctx.fillStyle = `rgba(${100 + Math.random() * 50}, ${85 + Math.random() * 40}, ${60 + Math.random() * 30}, 0.5)`;
+        } else {
+            ctx.fillStyle = `rgba(${140 + Math.random() * 60}, ${140 + Math.random() * 60}, ${140 + Math.random() * 60}, 0.7)`;
+        }
+
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Taches d'huile/essence (irisées)
+    for (let i = 0; i < 25; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const size = 15 + Math.random() * 40;
+        const gradient2 = ctx.createRadialGradient(x, y, 0, x, y, size);
+        gradient2.addColorStop(0, 'rgba(80, 60, 100, 0.3)');
+        gradient2.addColorStop(0.4, 'rgba(40, 80, 90, 0.2)');
+        gradient2.addColorStop(0.7, 'rgba(60, 40, 50, 0.1)');
+        gradient2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = gradient2;
+        ctx.fillRect(x - size, y - size, size * 2, size * 2);
+    }
+
+    // Fissures réalistes dans l'asphalte
+    ctx.strokeStyle = 'rgba(15, 15, 15, 0.8)';
+    for (let i = 0; i < 25; i++) {
+        ctx.lineWidth = 1 + Math.random() * 2;
+        ctx.beginPath();
+        const startX = Math.random() * 512;
+        const startY = Math.random() * 512;
+        ctx.moveTo(startX, startY);
+        let currentX = startX;
+        let currentY = startY;
+        for (let j = 0; j < 6; j++) {
+            currentX += (Math.random() - 0.5) * 60;
+            currentY += (Math.random() - 0.5) * 60;
+            ctx.lineTo(currentX, currentY);
+        }
+        ctx.stroke();
+    }
+
+    // Lignes de marquage au sol (blanches usées)
+    if (Math.random() > 0.3) {
+        ctx.strokeStyle = 'rgba(220, 220, 220, 0.6)';
+        ctx.lineWidth = 8;
+        ctx.setLineDash([20, 15]);
+        ctx.beginPath();
+        ctx.moveTo(256, 0);
+        ctx.lineTo(256, 512);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // Traces de pneus
+    for (let i = 0; i < 8; i++) {
+        const startX = Math.random() * 400;
+        const startY = Math.random() * 512;
+        ctx.strokeStyle = 'rgba(10, 10, 10, 0.3)';
+        ctx.lineWidth = 3 + Math.random() * 2;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        for (let j = 0; j < 10; j++) {
+            ctx.lineTo(startX + j * 10 + Math.random() * 3, startY + (Math.random() - 0.5) * 20);
+        }
+        ctx.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(4, 4);
+    texture.needsUpdate = true;
+    console.log('✓ Texture asphalte créée');
+    return texture;
+}
+
+console.log('Création des textures...');
+const concreteTexture = createConcreteTexture();
+const asphaltTexture = createAsphaltTexture();
+console.log('Textures prêtes !');
+
 function createCollege() {
-    // Création de la texture procédurale pour les murs (briques)
-    const createBrickTexture = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const ctx = canvas.getContext('2d');
+    // Charger le modèle 3D du collège
+    gltfLoader.load(
+        './college_revesz_long_simplified.glb',
+        // onLoad
+        (gltf) => {
+            console.log('Modèle du collège chargé avec succès');
+            collegeModel = gltf.scene;
 
-        // Fond de base (mortier)
-        ctx.fillStyle = '#8b7355';
-        ctx.fillRect(0, 0, 512, 512);
+            // Configurer le modèle (Y-up, origine près de l'entrée côté abris bus)
+            collegeModel.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
 
-        // Dessiner les briques
-        const brickWidth = 128;
-        const brickHeight = 64;
-        const mortarSize = 4;
+                    // Appliquer les textures selon le type d'objet
+                    const nameLower = (child.name || '').toLowerCase();
+                    const isSol = nameLower.includes('sol') || nameLower.includes('parking') ||
+                                  nameLower.includes('ground') || nameLower.includes('floor');
 
-        for (let y = 0; y < 512; y += brickHeight) {
-            for (let x = 0; x < 512; x += brickWidth) {
-                // Décalage pour effet de briques alternées
-                const offsetX = (y / brickHeight) % 2 === 0 ? 0 : brickWidth / 2;
+                    if (isSol) {
+                        // Sol : asphalte gris foncé avec texture
+                        const newMaterial = child.material.clone();
+                        newMaterial.map = asphaltTexture;
+                        newMaterial.needsUpdate = true;
+                        newMaterial.color.setHex(0x3a3a3a);
+                        child.material = newMaterial;
+                        console.log(`✓ Texture asphalte sur: ${child.name}`);
+                    } else {
+                        // Murs : béton beige avec texture
+                        const newMaterial = child.material.clone();
+                        newMaterial.map = concreteTexture;
+                        newMaterial.needsUpdate = true;
+                        newMaterial.color.setHex(0xb8b8a0);
+                        child.material = newMaterial;
+                        console.log(`✓ Texture béton sur: ${child.name}`);
 
-                // Couleur de brique variable
-                const shade = Math.random() * 30 - 15;
-                const r = Math.floor(165 + shade);
-                const g = Math.floor(102 + shade);
-                const b = Math.floor(70 + shade);
+                        // RÉACTIVER LES COLLISIONS - Système simple avec murs invisibles
+                        const bbox = new THREE.Box3().setFromObject(child);
+                        const size = new THREE.Vector3();
+                        const center = new THREE.Vector3();
+                        bbox.getSize(size);
+                        bbox.getCenter(center);
 
-                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-                ctx.fillRect(
-                    x + offsetX + mortarSize,
-                    y + mortarSize,
-                    brickWidth - mortarSize * 2,
-                    brickHeight - mortarSize * 2
-                );
+                        // Créer une collision simple au niveau du sol (hauteur de 2m)
+                        // Réduite à 70% pour laisser plus d'espace au joueur
+                        if (size.x > 2 && size.z > 2) {
+                            addCollisionBox(center.x, 1, center.z, size.x * 0.7, 2, size.z * 0.7);
+                            console.log(`✓ Collision créée: ${child.name} à (${center.x.toFixed(1)}, ${center.z.toFixed(1)}) - taille ${(size.x * 0.7).toFixed(1)}x${(size.z * 0.7).toFixed(1)}`);
+                        }
+                    }
+                }
+            });
 
-                // Ombrage sur les briques
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-                ctx.fillRect(
-                    x + offsetX + mortarSize,
-                    y + brickHeight - mortarSize - 10,
-                    brickWidth - mortarSize * 2,
-                    8
-                );
-            }
+            // Position du modèle (origine déjà bien placée)
+            collegeModel.position.set(0, 0, 0);
+            scene.add(collegeModel);
+
+            console.log('✓ Collège chargé:', window.collisionObjects.length, 'collisions créées');
+        },
+        // onProgress
+        (xhr) => {
+            console.log('Chargement du collège: ' + (xhr.loaded / xhr.total * 100) + '%');
+        },
+        // onError
+        (error) => {
+            console.error('Erreur de chargement du modèle du collège:', error);
         }
-
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(8, 2);
-        return texture;
-    };
-
-    const brickTexture = createBrickTexture();
-
-    // Création de texture pour le sol (pavés/asphalte)
-    const createGroundTexture = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-
-        // Base asphalte
-        ctx.fillStyle = '#3a3a3a';
-        ctx.fillRect(0, 0, 512, 512);
-
-        // Ajouter des imperfections
-        for (let i = 0; i < 1000; i++) {
-            const x = Math.random() * 512;
-            const y = Math.random() * 512;
-            const shade = Math.floor(Math.random() * 40) - 20;
-            ctx.fillStyle = `rgba(${58 + shade}, ${58 + shade}, ${58 + shade}, 0.3)`;
-            ctx.fillRect(x, y, Math.random() * 3, Math.random() * 3);
-        }
-
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(20, 20);
-        return texture;
-    };
-
-    // Création de texture béton pour les bâtiments
-    const createConcreteTexture = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-
-        // Base béton
-        ctx.fillStyle = '#c8c8c8';
-        ctx.fillRect(0, 0, 512, 512);
-
-        // Lignes horizontales (jointures entre panneaux)
-        ctx.strokeStyle = '#a0a0a0';
-        ctx.lineWidth = 3;
-        for (let y = 0; y < 512; y += 128) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(512, y);
-            ctx.stroke();
-        }
-
-        // Taches et imperfections
-        for (let i = 0; i < 500; i++) {
-            const x = Math.random() * 512;
-            const y = Math.random() * 512;
-            const shade = Math.floor(Math.random() * 30) - 15;
-            ctx.fillStyle = `rgba(${200 + shade}, ${200 + shade}, ${200 + shade}, 0.5)`;
-            ctx.beginPath();
-            ctx.arc(x, y, Math.random() * 5, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(3, 2);
-        return texture;
-    };
-
-    const groundTexture = createGroundTexture();
-    const concreteTexture = createConcreteTexture();
-
-    // Sol principal (cour)
-    const groundGeometry = new THREE.BoxGeometry(100, 0.5, 100);
-    const groundMaterial = new THREE.MeshStandardMaterial({
-        map: groundTexture,
-        roughness: 0.9,
-        metalness: 0.1
-    });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.position.y = -0.25;
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    // Bâtiment principal avec fenêtres
-    const mainBuildingGroup = new THREE.Group();
-
-    // Corps du bâtiment
-    const buildingGeometry = new THREE.BoxGeometry(40, 15, 20);
-    const buildingMaterial = new THREE.MeshStandardMaterial({
-        map: concreteTexture,
-        roughness: 0.8,
-        metalness: 0.2
-    });
-    const mainBuilding = new THREE.Mesh(buildingGeometry, buildingMaterial);
-    mainBuilding.castShadow = true;
-    mainBuilding.receiveShadow = true;
-    mainBuildingGroup.add(mainBuilding);
-
-    // Ajouter des fenêtres
-    const windowGeometry = new THREE.BoxGeometry(2, 2.5, 0.2);
-    const windowMaterial = new THREE.MeshStandardMaterial({
-        color: 0x87ceeb,
-        metalness: 0.9,
-        roughness: 0.1,
-        emissive: 0x223344,
-        emissiveIntensity: 0.3
-    });
-
-    // Fenêtres façade avant
-    for (let i = -3; i <= 3; i++) {
-        for (let j = 0; j < 2; j++) {
-            const window = new THREE.Mesh(windowGeometry, windowMaterial);
-            window.position.set(i * 5, -3 + j * 5, 10.1);
-            mainBuildingGroup.add(window);
-        }
-    }
-
-    mainBuildingGroup.position.set(0, 7.5, -30);
-    scene.add(mainBuildingGroup);
-
-    // Porte d'entrée du bâtiment principal
-    const doorGeometry = new THREE.BoxGeometry(3, 4, 0.3);
-    const doorMaterial = new THREE.MeshStandardMaterial({
-        color: 0x654321,
-        roughness: 0.8,
-        metalness: 0.1
-    });
-    const mainDoor = new THREE.Mesh(doorGeometry, doorMaterial);
-    mainDoor.position.set(0, 2, -19.85);
-    mainDoor.castShadow = true;
-    scene.add(mainDoor);
-
-    // Poignée de porte
-    const handleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-    const handleMaterial = new THREE.MeshStandardMaterial({
-        color: 0xcccccc,
-        metalness: 0.9,
-        roughness: 0.2
-    });
-    const handle = new THREE.Mesh(handleGeometry, handleMaterial);
-    handle.position.set(1, 2, -19.7);
-    scene.add(handle);
-
-    // Sol du 1er étage (plate-forme)
-    const firstFloorGeometry = new THREE.BoxGeometry(38, 0.5, 18);
-    const firstFloorMaterial = new THREE.MeshStandardMaterial({
-        map: concreteTexture.clone(),
-        roughness: 0.9,
-        metalness: 0.1
-    });
-    const firstFloor = new THREE.Mesh(firstFloorGeometry, firstFloorMaterial);
-    firstFloor.position.set(0, 15, -30);
-    firstFloor.receiveShadow = true;
-    scene.add(firstFloor);
-
-    // Escalier pour monter au 1er étage
-    const stairCount = 15;
-    const stairWidth = 4;
-    const stairDepth = 0.8;
-    const stairHeight = 0.5;
-
-    for (let i = 0; i < stairCount; i++) {
-        const stairGeometry = new THREE.BoxGeometry(stairWidth, stairHeight, stairDepth);
-        const stairMaterial = new THREE.MeshStandardMaterial({
-            map: concreteTexture.clone(),
-            roughness: 0.9,
-            metalness: 0.1
-        });
-        const stair = new THREE.Mesh(stairGeometry, stairMaterial);
-        stair.position.set(-15, 0.25 + i * stairHeight, -22 + i * stairDepth);
-        stair.castShadow = true;
-        stair.receiveShadow = true;
-        scene.add(stair);
-    }
-
-    // Couloir central
-    const corridorGeometry = new THREE.BoxGeometry(5, 8, 30);
-    const corridorMaterial = new THREE.MeshStandardMaterial({
-        map: concreteTexture.clone(),
-        roughness: 0.8,
-        metalness: 0.2
-    });
-    corridorMaterial.map.repeat.set(1, 2);
-    const corridor = new THREE.Mesh(corridorGeometry, corridorMaterial);
-    corridor.position.set(0, 4, -25);
-    corridor.castShadow = true;
-    corridor.receiveShadow = true;
-    scene.add(corridor);
-
-    // Salles de classe (gauche et droite)
-    for (let i = 0; i < 4; i++) {
-        const classroomGeometry = new THREE.BoxGeometry(10, 8, 8);
-        const classroomMaterial = new THREE.MeshStandardMaterial({
-            map: brickTexture.clone(),
-            roughness: 0.9,
-            metalness: 0.1
-        });
-        classroomMaterial.map.repeat.set(2, 2);
-
-        // Salle gauche
-        const classroomLeft = new THREE.Mesh(classroomGeometry, classroomMaterial);
-        classroomLeft.position.set(-15, 4, -40 + i * 10);
-        classroomLeft.castShadow = true;
-        classroomLeft.receiveShadow = true;
-        scene.add(classroomLeft);
-
-        // Porte salle gauche
-        const classroomDoorGeometry = new THREE.BoxGeometry(2, 3, 0.2);
-        const classroomDoorLeft = new THREE.Mesh(classroomDoorGeometry, doorMaterial);
-        classroomDoorLeft.position.set(-10.1, 1.5, -40 + i * 10);
-        classroomDoorLeft.rotation.y = Math.PI / 2;
-        classroomDoorLeft.castShadow = true;
-        scene.add(classroomDoorLeft);
-
-        // Fenêtre salle gauche
-        const windowLeft = new THREE.Mesh(windowGeometry, windowMaterial);
-        windowLeft.position.set(-15, 4, -40 + i * 10 + 4.1);
-        scene.add(windowLeft);
-
-        // Salle droite
-        const classroomRight = new THREE.Mesh(classroomGeometry, classroomMaterial.clone());
-        classroomRight.position.set(15, 4, -40 + i * 10);
-        classroomRight.castShadow = true;
-        classroomRight.receiveShadow = true;
-        scene.add(classroomRight);
-
-        // Porte salle droite
-        const classroomDoorRight = new THREE.Mesh(classroomDoorGeometry, doorMaterial);
-        classroomDoorRight.position.set(10.1, 1.5, -40 + i * 10);
-        classroomDoorRight.rotation.y = Math.PI / 2;
-        classroomDoorRight.castShadow = true;
-        scene.add(classroomDoorRight);
-
-        // Fenêtre salle droite
-        const windowRight = new THREE.Mesh(windowGeometry, windowMaterial);
-        windowRight.position.set(15, 4, -40 + i * 10 + 4.1);
-        scene.add(windowRight);
-    }
-
-    // Murs de clôture avec texture
-    const wallGeometry = new THREE.BoxGeometry(100, 5, 1);
-    const wallMaterial = new THREE.MeshStandardMaterial({
-        map: brickTexture,
-        roughness: 0.9,
-        metalness: 0.1
-    });
-
-    const wallBack = new THREE.Mesh(wallGeometry, wallMaterial);
-    wallBack.position.set(0, 2.5, -50);
-    wallBack.castShadow = true;
-    wallBack.receiveShadow = true;
-    scene.add(wallBack);
-
-    const wallFront = new THREE.Mesh(wallGeometry, wallMaterial.clone());
-    wallFront.position.set(0, 2.5, 50);
-    wallFront.castShadow = true;
-    wallFront.receiveShadow = true;
-    scene.add(wallFront);
-
-    const wallLeftGeometry = new THREE.BoxGeometry(1, 5, 100);
-    const wallLeftMaterial = new THREE.MeshStandardMaterial({
-        map: brickTexture.clone(),
-        roughness: 0.9,
-        metalness: 0.1
-    });
-    wallLeftMaterial.map.repeat.set(8, 2);
-
-    const wallLeft = new THREE.Mesh(wallLeftGeometry, wallLeftMaterial);
-    wallLeft.position.set(-50, 2.5, 0);
-    wallLeft.castShadow = true;
-    wallLeft.receiveShadow = true;
-    scene.add(wallLeft);
-
-    const wallRight = new THREE.Mesh(wallLeftGeometry, wallLeftMaterial.clone());
-    wallRight.position.set(50, 2.5, 0);
-    wallRight.castShadow = true;
-    wallRight.receiveShadow = true;
-    scene.add(wallRight);
+    );
 
     // Création de texture pour le tronc
     const createBarkTexture = () => {
@@ -537,23 +511,8 @@ function addCollisionBox(x, y, z, width, height, depth) {
     });
 }
 
-// Ajouter les collisions pour les murs de clôture
-addCollisionBox(0, 2.5, -50, 100, 5, 1);   // Mur arrière
-addCollisionBox(0, 2.5, 50, 100, 5, 1);    // Mur avant
-addCollisionBox(-50, 2.5, 0, 1, 5, 100);   // Mur gauche
-addCollisionBox(50, 2.5, 0, 1, 5, 100);    // Mur droit
-
-// Ajouter les collisions pour le bâtiment principal
-addCollisionBox(0, 7.5, -30, 40, 15, 20);
-
-// Ajouter les collisions pour le couloir
-addCollisionBox(0, 4, -25, 5, 8, 30);
-
-// Ajouter les collisions pour les salles de classe
-for (let i = 0; i < 4; i++) {
-    addCollisionBox(-15, 4, -40 + i * 10, 10, 8, 8);  // Gauche
-    addCollisionBox(15, 4, -40 + i * 10, 10, 8, 8);   // Droite
-}
+// Les collisions seront calculées automatiquement depuis le modèle GLB du collège
+// TODO: Ajouter des collisions basées sur la géométrie du modèle chargé
 
 // Fonction pour vérifier la collision
 function checkCollision(newPos, radius = 0.5) {
@@ -565,6 +524,7 @@ function checkCollision(newPos, radius = 0.5) {
             return true; // Collision détectée
         }
     }
+
     return false; // Pas de collision
 }
 
@@ -572,7 +532,8 @@ function checkCollision(newPos, radius = 0.5) {
 const playerGeometry = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
 const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x0066ff });
 const player = new THREE.Mesh(playerGeometry, playerMaterial);
-player.position.set(0, CONFIG.player.height / 2, 20);
+// Spawn loin des bâtiments pour éviter les collisions initiales
+player.position.set(0, CONFIG.player.height / 2, 30);
 player.castShadow = true;
 scene.add(player);
 
@@ -846,7 +807,6 @@ const createZombieSkinTexture = () => {
 const zombieSkinTexture = createZombieSkinTexture();
 
 // Chargement du modèle 3D zombie
-const gltfLoader = new GLTFLoader();
 let zombieModel = null;
 let zombieModelLoaded = false;
 
@@ -1202,7 +1162,7 @@ function switchWeapon() {
     camera.add(currentWeaponMesh);
 }
 
-// Tir avec la touche A et changement d'arme avec Z
+// Tir avec la touche A, changement d'arme avec Z
 document.addEventListener('keydown', (e) => {
     if (!isPointerLocked) return;
 
@@ -1522,42 +1482,17 @@ function animate() {
 
         player.position.add(playerVelocity);
 
-        // Ground and stairs collision
-        // Vérifier si on est sur l'escalier
-        const onStairs = player.position.x >= -17 && player.position.x <= -13 &&
-                         player.position.z >= -22 && player.position.z <= -10;
-
-        if (onStairs) {
-            // Sur l'escalier - la hauteur dépend de la position Z
-            const stairProgress = (player.position.z + 22) / 12; // De 0 à 1
-            const stairHeight = stairProgress * 7.5; // Monte de 0 à 7.5m
-            const targetHeight = stairHeight + CONFIG.player.height / 2;
-
-            if (player.position.y < targetHeight) {
-                player.position.y = targetHeight;
-                isOnGround = true;
-            } else if (player.position.y <= targetHeight + 0.5) {
-                isOnGround = true;
-            } else {
-                isOnGround = false;
-            }
-        } else if (player.position.y <= CONFIG.player.height / 2) {
-            // Au sol normal
+        // Ground collision (simple)
+        if (player.position.y <= CONFIG.player.height / 2) {
             player.position.y = CONFIG.player.height / 2;
-            isOnGround = true;
-        } else if (player.position.y >= 14.5 && player.position.y <= 15.5 &&
-                   player.position.x >= -19 && player.position.x <= 19 &&
-                   player.position.z >= -39 && player.position.z <= -21) {
-            // Sur le 1er étage
-            player.position.y = 15 + CONFIG.player.height / 2;
             isOnGround = true;
         } else {
             isOnGround = false;
         }
 
-        // Boundaries
-        player.position.x = Math.max(-48, Math.min(48, player.position.x));
-        player.position.z = Math.max(-48, Math.min(48, player.position.z));
+        // Boundaries (zone plus large pour le nouveau collège)
+        player.position.x = Math.max(-100, Math.min(100, player.position.x));
+        player.position.z = Math.max(-100, Math.min(100, player.position.z));
 
         // Update zombies
         zombies.forEach(zombie => zombie.update());
