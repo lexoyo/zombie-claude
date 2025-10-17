@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zombie College - Prototype</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100vh;
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            z-index: 100;
+        }
+
+        #health-bar {
+            width: 200px;
+            height: 30px;
+            background: rgba(255,0,0,0.3);
+            border: 2px solid white;
+            margin-bottom: 10px;
+        }
+
+        #health-fill {
+            height: 100%;
+            background: linear-gradient(to right, #ff0000, #ff6666);
+            width: 100%;
+            transition: width 0.3s;
+        }
+
+        #score {
+            font-weight: bold;
+            font-size: 24px;
+        }
+
+        #weapon-indicator {
+            margin-top: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #ffaa00;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 30px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Ligne verticale */
+        #crosshair::before {
+            left: 50%;
+            top: 0;
+            transform: translateX(-50%);
+            width: 3px;
+            height: 100%;
+        }
+
+        /* Ligne horizontale */
+        #crosshair::after {
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            height: 3px;
+            width: 100%;
+        }
+
+        /* Point central */
+        #crosshair-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 4px;
+            background: rgba(255, 0, 0, 0.8);
+            border-radius: 50%;
+            box-shadow: 0 0 4px rgba(255, 0, 0, 0.6);
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            text-align: center;
+            font-size: 14px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            font-size: 48px;
+            display: none;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.9);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="health-bar">
+            <div id="health-fill"></div>
+        </div>
+        <div id="score">Zombies: 0</div>
+        <div id="weapon-indicator">Arme: FUSIL D'ASSAUT</div>
+    </div>
+
+    <div id="crosshair">
+        <div id="crosshair-center"></div>
+    </div>
+
+    <div id="instructions">
+        FLÈCHES: Déplacement | ESPACE: Saut | A: Tirer | Z: Changer d'arme<br>
+        SOURIS: Regarder | Cliquez pour verrouiller la souris<br>
+        Tirez 3 fois sur les arbres pour les détruire | Collectez les sphères jaunes pour tuer tous les zombies proches
+    </div>
+
+    <div id="game-over">
+        GAME OVER<br>
+        <span style="font-size: 24px;">Rechargez la page pour rejouer</span>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+    <script type="module" src="game.js"></script>
+</body>
+</html>
