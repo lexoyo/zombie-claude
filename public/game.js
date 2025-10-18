@@ -62,105 +62,18 @@ scene.add(sunLight);
 // ===== GLTF LOADER =====
 const gltfLoader = new GLTFLoader();
 
+// ===== TEXTURE LOADER =====
+const textureLoader = new THREE.TextureLoader();
+
 // ===== COLLEGE ENVIRONMENT =====
 let collegeModel = null;
 
-// Créer texture de béton pour les murs
-function createConcreteTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d');
+// Charger la texture de brique depuis le fichier
+let brickTexture = null;
 
-    // Base béton avec variations de couleur (beige/gris)
-    const gradient = ctx.createLinearGradient(0, 0, 512, 512);
-    gradient.addColorStop(0, '#c4b8a0');
-    gradient.addColorStop(0.5, '#a8a090');
-    gradient.addColorStop(1, '#b0a898');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 512, 512);
-
-    // Texture granuleuse fine (sable dans le béton)
-    for (let i = 0; i < 10000; i++) {
-        const x = Math.random() * 512;
-        const y = Math.random() * 512;
-        const r = 160 + Math.random() * 80;
-        const g = 150 + Math.random() * 70;
-        const b = 130 + Math.random() * 60;
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.2 + Math.random() * 0.3})`;
-        ctx.fillRect(x, y, 1 + Math.random(), 1 + Math.random());
-    }
-
-    // Taches d'humidité et de saleté
-    for (let i = 0; i < 40; i++) {
-        const x = Math.random() * 512;
-        const y = Math.random() * 512;
-        const size = 20 + Math.random() * 60;
-        const gradient2 = ctx.createRadialGradient(x, y, 0, x, y, size);
-        gradient2.addColorStop(0, 'rgba(80, 75, 65, 0.3)');
-        gradient2.addColorStop(0.7, 'rgba(100, 95, 85, 0.15)');
-        gradient2.addColorStop(1, 'rgba(120, 115, 105, 0)');
-        ctx.fillStyle = gradient2;
-        ctx.fillRect(x - size, y - size, size * 2, size * 2);
-    }
-
-    // Fissures dans le béton
-    ctx.strokeStyle = 'rgba(60, 55, 50, 0.6)';
-    ctx.lineWidth = 1 + Math.random();
-    for (let i = 0; i < 20; i++) {
-        ctx.beginPath();
-        const startX = Math.random() * 512;
-        const startY = Math.random() * 512;
-        ctx.moveTo(startX, startY);
-        let currentX = startX;
-        let currentY = startY;
-        for (let j = 0; j < 8; j++) {
-            currentX += (Math.random() - 0.5) * 40;
-            currentY += (Math.random() - 0.5) * 40;
-            ctx.lineTo(currentX, currentY);
-        }
-        ctx.stroke();
-    }
-
-    // Blocs de béton (joints verticaux et horizontaux)
-    ctx.strokeStyle = 'rgba(70, 65, 55, 0.5)';
-    ctx.lineWidth = 3;
-    // Joints horizontaux
-    for (let y = 0; y < 512; y += 128) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(512, y);
-        ctx.stroke();
-    }
-    // Joints verticaux
-    for (let x = 0; x < 512; x += 256) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, 512);
-        ctx.stroke();
-    }
-
-    // Traces de rouille (taches orangées)
-    for (let i = 0; i < 15; i++) {
-        const x = Math.random() * 512;
-        const y = Math.random() * 512;
-        const size = 10 + Math.random() * 25;
-        const gradient3 = ctx.createRadialGradient(x, y, 0, x, y, size);
-        gradient3.addColorStop(0, 'rgba(180, 100, 40, 0.4)');
-        gradient3.addColorStop(0.5, 'rgba(160, 90, 35, 0.2)');
-        gradient3.addColorStop(1, 'rgba(140, 80, 30, 0)');
-        ctx.fillStyle = gradient3;
-        ctx.fillRect(x - size, y - size, size * 2, size * 2);
-    }
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(2, 2);
-    texture.needsUpdate = true;
-    console.log('✓ Texture béton créée');
-    return texture;
-}
+// Initialiser les tableaux globaux immédiatement
+window.trees = [];
+window.powerups = [];
 
 // Créer texture d'asphalte pour le sol
 function createAsphaltTexture() {
@@ -292,10 +205,31 @@ function createAsphaltTexture() {
     return texture;
 }
 
-console.log('Création des textures...');
-const concreteTexture = createConcreteTexture();
+console.log('Création de la texture d\'asphalte...');
 const asphaltTexture = createAsphaltTexture();
-console.log('Textures prêtes !');
+console.log('Texture asphalte prête !');
+
+// Charger la texture de brique AVANT le collège
+console.log('Chargement de la texture de brique...');
+textureLoader.load(
+    './brick_texture_1024.png',
+    (texture) => {
+        brickTexture = texture;
+        brickTexture.wrapS = THREE.RepeatWrapping;
+        brickTexture.wrapT = THREE.RepeatWrapping;
+        brickTexture.repeat.set(2, 2);
+        console.log('✓ Texture de brique chargée depuis brick_texture_1024.png');
+
+        // Maintenant charger le collège
+        createCollege();
+    },
+    undefined,
+    (error) => {
+        console.error('Erreur de chargement de la texture de brique:', error);
+        // Charger le collège quand même
+        createCollege();
+    }
+);
 
 function createCollege() {
     // Charger le modèle 3D du collège
@@ -319,20 +253,47 @@ function createCollege() {
 
                     if (isSol) {
                         // Sol : asphalte gris foncé avec texture
-                        const newMaterial = child.material.clone();
-                        newMaterial.map = asphaltTexture;
-                        newMaterial.needsUpdate = true;
-                        newMaterial.color.setHex(0x3a3a3a);
+                        const newMaterial = new THREE.MeshStandardMaterial({
+                            map: asphaltTexture,
+                            color: 0x3a3a3a,
+                            roughness: 0.95,
+                            metalness: 0
+                        });
                         child.material = newMaterial;
                         console.log(`✓ Texture asphalte sur: ${child.name}`);
                     } else {
-                        // Murs : béton beige avec texture
-                        const newMaterial = child.material.clone();
-                        newMaterial.map = concreteTexture;
-                        newMaterial.needsUpdate = true;
-                        newMaterial.color.setHex(0xb8b8a0);
+                        // Vérifier si le mesh a des coordonnées UV
+                        const hasUV = child.geometry && child.geometry.attributes.uv;
+                        console.log(`📐 ${child.name} - UV présentes: ${hasUV ? 'OUI' : 'NON'}`);
+
+                        if (!hasUV && child.geometry) {
+                            // Générer des UV basiques (mapping planaire)
+                            const positions = child.geometry.attributes.position;
+                            const uvs = [];
+
+                            for (let i = 0; i < positions.count; i++) {
+                                const x = positions.getX(i);
+                                const z = positions.getZ(i);
+                                // Mapping planaire simple basé sur X et Z
+                                uvs.push(x * 0.1, z * 0.1);
+                            }
+
+                            child.geometry.setAttribute('uv',
+                                new THREE.Float32BufferAttribute(uvs, 2)
+                            );
+                            console.log(`✓ UV générées pour: ${child.name}`);
+                        }
+
+                        // Murs : texture de brique réelle
+                        const newMaterial = new THREE.MeshStandardMaterial({
+                            map: brickTexture,
+                            color: 0xa85545, // Couleur terre cuite/brique en fallback
+                            roughness: 0.9,
+                            metalness: 0,
+                            side: THREE.DoubleSide // Rendre les deux côtés du mur
+                        });
                         child.material = newMaterial;
-                        console.log(`✓ Texture béton sur: ${child.name}`);
+                        console.log(`✓ Texture brique sur: ${child.name}`);
 
                         // RÉACTIVER LES COLLISIONS - Système simple avec murs invisibles
                         const bbox = new THREE.Box3().setFromObject(child);
@@ -341,11 +302,11 @@ function createCollege() {
                         bbox.getSize(size);
                         bbox.getCenter(center);
 
-                        // Créer une collision simple au niveau du sol (hauteur de 2m)
-                        // Réduite à 70% pour laisser plus d'espace au joueur
+                        // Créer une collision simple au niveau du sol (hauteur de 3m)
+                        // Agrandir légèrement les collisions pour éviter de rentrer dans les murs
                         if (size.x > 2 && size.z > 2) {
-                            addCollisionBox(center.x, 1, center.z, size.x * 0.7, 2, size.z * 0.7);
-                            console.log(`✓ Collision créée: ${child.name} à (${center.x.toFixed(1)}, ${center.z.toFixed(1)}) - taille ${(size.x * 0.7).toFixed(1)}x${(size.z * 0.7).toFixed(1)}`);
+                            addCollisionBox(center.x, 1.5, center.z, size.x * 1.1, 3, size.z * 1.1);
+                            console.log(`✓ Collision créée: ${child.name} à (${center.x.toFixed(1)}, ${center.z.toFixed(1)}) - taille ${(size.x * 1.1).toFixed(1)}x${(size.z * 1.1).toFixed(1)}`);
                         }
                     }
                 }
@@ -407,7 +368,6 @@ function createCollege() {
     const barkTexture = createBarkTexture();
 
     // Arbres destructibles avec tronc et feuillage
-    window.trees = []; // Array global pour les arbres
     for (let i = 0; i < 8; i++) {
         const treeGroup = new THREE.Group();
         treeGroup.userData.health = 3; // 3 tirs pour détruire
@@ -465,12 +425,29 @@ function createCollege() {
         const angle = (i / 8) * Math.PI * 2;
         treeGroup.position.set(Math.cos(angle) * 35, 0, Math.sin(angle) * 35);
         treeGroup.rotation.y = Math.random() * Math.PI * 2;
+
+        // Ajouter une collision pour l'arbre (cylindre autour du tronc)
+        const treeCollision = {
+            min: new THREE.Vector3(
+                treeGroup.position.x - 0.6,
+                0,
+                treeGroup.position.z - 0.6
+            ),
+            max: new THREE.Vector3(
+                treeGroup.position.x + 0.6,
+                5,
+                treeGroup.position.z + 0.6
+            )
+        };
+        window.collisionObjects.push(treeCollision);
+        treeGroup.userData.collisionIndex = window.collisionObjects.length - 1;
+        console.log(`✓ Collision arbre créée à (${treeGroup.position.x.toFixed(1)}, ${treeGroup.position.z.toFixed(1)})`);
+
         scene.add(treeGroup);
         window.trees.push(treeGroup);
     }
 
     // Power-ups (objets lumineux)
-    window.powerups = [];
     for (let i = 0; i < 10; i++) {
         const powerupGeometry = new THREE.SphereGeometry(0.5, 16, 16);
         const powerupMaterial = new THREE.MeshStandardMaterial({
@@ -497,7 +474,7 @@ function createCollege() {
     }
 }
 
-createCollege();
+// Le collège est maintenant chargé automatiquement après le chargement de la texture de brique
 
 // ===== COLLISION SYSTEM =====
 // Array global pour stocker les objets de collision (murs, bâtiments)
@@ -514,9 +491,12 @@ function addCollisionBox(x, y, z, width, height, depth) {
 // Les collisions seront calculées automatiquement depuis le modèle GLB du collège
 // TODO: Ajouter des collisions basées sur la géométrie du modèle chargé
 
-// Fonction pour vérifier la collision
+// Fonction pour vérifier la collision et pousser le joueur hors du mur
 function checkCollision(newPos, radius = 0.5) {
     for (const box of window.collisionObjects) {
+        // Ignorer les collisions retirées (arbres détruits)
+        if (!box) continue;
+
         // Vérifier si la position du joueur (avec son rayon) entre en collision avec la boîte
         if (newPos.x + radius > box.min.x && newPos.x - radius < box.max.x &&
             newPos.y + CONFIG.player.height / 2 > box.min.y && newPos.y - CONFIG.player.height / 2 < box.max.y &&
@@ -526,6 +506,45 @@ function checkCollision(newPos, radius = 0.5) {
     }
 
     return false; // Pas de collision
+}
+
+// Fonction pour pousser le joueur hors d'un mur s'il est coincé dedans
+function pushPlayerOutOfWalls(playerPos, radius = 0.5) {
+    for (const box of window.collisionObjects) {
+        if (!box) continue;
+
+        if (playerPos.x + radius > box.min.x && playerPos.x - radius < box.max.x &&
+            playerPos.y + CONFIG.player.height / 2 > box.min.y && playerPos.y - CONFIG.player.height / 2 < box.max.y &&
+            playerPos.z + radius > box.min.z && playerPos.z - radius < box.max.z) {
+
+            // Le joueur est dans le mur, calculer la direction la plus proche pour sortir
+            const overlapX = Math.min(
+                Math.abs((playerPos.x + radius) - box.min.x),
+                Math.abs((playerPos.x - radius) - box.max.x)
+            );
+            const overlapZ = Math.min(
+                Math.abs((playerPos.z + radius) - box.min.z),
+                Math.abs((playerPos.z - radius) - box.max.z)
+            );
+
+            // Pousser sur l'axe avec le moins de chevauchement
+            if (overlapX < overlapZ) {
+                // Pousser sur X
+                if (playerPos.x < (box.min.x + box.max.x) / 2) {
+                    playerPos.x = box.min.x - radius - 0.1;
+                } else {
+                    playerPos.x = box.max.x + radius + 0.1;
+                }
+            } else {
+                // Pousser sur Z
+                if (playerPos.z < (box.min.z + box.max.z) / 2) {
+                    playerPos.z = box.min.z - radius - 0.1;
+                } else {
+                    playerPos.z = box.max.z + radius + 0.1;
+                }
+            }
+        }
+    }
 }
 
 // ===== PLAYER SETUP =====
@@ -1356,6 +1375,13 @@ function shoot() {
             if (treeHit.tree.userData.health <= 0) {
                 // Détruire l'arbre
                 treeHit.tree.userData.isDestroyed = true;
+
+                // Retirer la collision de l'arbre
+                if (treeHit.tree.userData.collisionIndex !== undefined) {
+                    window.collisionObjects[treeHit.tree.userData.collisionIndex] = null;
+                    console.log('✓ Collision de l\'arbre retirée');
+                }
+
                 // Appliquer une vélocité initiale (chute dans une direction aléatoire)
                 const fallDirection = Math.random() * Math.PI * 2;
                 treeHit.tree.userData.velocity.set(
@@ -1449,25 +1475,29 @@ function animate() {
             // Calculer la nouvelle position
             const newPos = player.position.clone().add(movement);
 
-            // Vérifier la collision
-            if (!checkCollision(newPos)) {
+            // Vérifier la collision avec un rayon plus grand (0.8 au lieu de 0.5)
+            const collisionRadius = 0.8;
+            if (!checkCollision(newPos, collisionRadius)) {
                 player.position.copy(newPos);
             } else {
                 // Essayer le mouvement uniquement sur X
                 const newPosX = player.position.clone();
                 newPosX.x += movement.x;
-                if (!checkCollision(newPosX)) {
+                if (!checkCollision(newPosX, collisionRadius)) {
                     player.position.x = newPosX.x;
                 }
 
                 // Essayer le mouvement uniquement sur Z
                 const newPosZ = player.position.clone();
                 newPosZ.z += movement.z;
-                if (!checkCollision(newPosZ)) {
+                if (!checkCollision(newPosZ, collisionRadius)) {
                     player.position.z = newPosZ.z;
                 }
             }
         }
+
+        // Pousser le joueur hors du mur s'il est coincé
+        pushPlayerOutOfWalls(player.position, 0.8);
 
         // Gravity and jump
         if (isOnGround) {
@@ -1498,7 +1528,8 @@ function animate() {
         zombies.forEach(zombie => zombie.update());
 
         // Update arbres tombants
-        window.trees.forEach(tree => {
+        if (window.trees) {
+            window.trees.forEach(tree => {
             if (tree.userData.isDestroyed) {
                 // Appliquer la gravité
                 tree.userData.velocity.y -= 0.01;
@@ -1517,15 +1548,19 @@ function animate() {
                 }
             }
         });
+        }
 
         // Animation de flottement des power-ups
-        window.powerups.forEach(powerup => {
-            powerup.position.y = 1 + Math.sin(Date.now() * 0.003 + powerup.userData.floatOffset) * 0.3;
-            powerup.rotation.y += 0.02;
-        });
+        if (window.powerups) {
+            window.powerups.forEach(powerup => {
+                powerup.position.y = 1 + Math.sin(Date.now() * 0.003 + powerup.userData.floatOffset) * 0.3;
+                powerup.rotation.y += 0.02;
+            });
+        }
 
         // Vérifier collision avec power-ups
-        for (let i = window.powerups.length - 1; i >= 0; i--) {
+        if (window.powerups) {
+            for (let i = window.powerups.length - 1; i >= 0; i--) {
             const powerup = window.powerups[i];
             const distance = player.position.distanceTo(powerup.position);
 
@@ -1566,6 +1601,7 @@ function animate() {
                 setTimeout(() => {
                     scene.remove(explosion);
                 }, 500);
+            }
             }
         }
     }
