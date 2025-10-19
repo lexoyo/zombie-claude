@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Collège - Invasion Zombie</title>
+  <style>
+    :root { --bg:#0f1115; --card:#171a21; --text:#e6e6e6; --muted:#a7b0c0; --accent:#ffd54a }
+    * { box-sizing: border-box }
+    body {
+      margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;
+      color: var(--text); background: radial-gradient(1200px 800px at 20% -10%, #1e2430 0%, #0f1115 60%)
+    }
+    header {
+      padding: 32px 20px; text-align: center; border-bottom: 1px solid #222833; background: #11151d80; backdrop-filter: blur(4px)
+    }
+    header h1 { margin: 0 0 10px 0; font-size: clamp(22px, 4vw, 34px); line-height: 1.2; letter-spacing: .3px }
+    header p { margin: 6px auto 0; max-width: 1000px; color: var(--muted); font-size: clamp(14px, 2.2vw, 18px) }
+    main { max-width: 960px; margin: 28px auto; padding: 0 20px 40px }
+    .card {
+      background: var(--card); border: 1px solid #222833; border-radius: 16px; padding: 22px;
+      box-shadow: 0 10px 30px #00000055; text-align: center
+    }
+    h2 { margin: 0 0 14px 0; font-size: 22px }
+    ul { margin: 12px 0 0 0; padding-left: 20px; text-align: left }
+    li { margin: 6px 0 }
+    .tip { margin-top: 14px; color: var(--muted) }
+    /* Bouton rouge Slashzombie */
+    .btn-red {
+      background: #c62828; color: #fff; font-size: 22px; padding: 18px 32px; border-radius: 14px;
+      text-decoration: none; font-weight: 700; display: inline-block; margin-top: 28px;
+      box-shadow: 0 4px 15px #00000088; transition: transform .1s ease
+    }
+    .btn-red:active { transform: translateY(2px) }
+    footer { text-align: center; color: var(--muted); font-size: 12px; padding: 20px }
+    .accent { color: var(--accent) }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Chers agents, un collège a été envahi par les zombies</h1>
+    <p>Je vous missionne de prendre vos armes et d’aller tuer tous les zombies
+    Pitié, revenez en vie, l’avenir de beaucoup de petits élèves est entre vos mains
+    Utilisez judicieusement vos armes
+    D’ailleurs, nous avons trouvé, par endroit, des objets jaunes
+    Essayez de les récupérer, ils pourront vous aider dans votre tâche</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Comment jouer</h2>
+      <ul>
+        <li>Tirer - touche <strong>Q</strong></li>
+        <li>Se déplacer - <strong>flèches</strong> du clavier</li>
+        <li>Regarder - <strong>souris</strong></li>
+        <li>Sauter - <strong>espace</strong></li>
+        <li>Évitez les zombies, ils sont dangereux</li>
+      </ul>
+      <p class="tip">Astuce - ramassez les <span class="accent">objets jaunes</span> pour obtenir des avantages</p>
+      <a class="btn-red" href="/public/">Commencez</a>
+    </section>
+  </main>
+
+  <footer>
+    Prototype - Invasion au Collège - Three.js
+  </footer>
+</body>
+</html>
