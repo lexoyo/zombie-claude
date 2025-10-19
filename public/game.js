@@ -241,6 +241,31 @@ function createCollege() {
             collegeModel = gltf.scene;
 
             // Configurer le modèle (Y-up, origine près de l'entrée côté abris bus)
+            // PREMIÈRE PASSE : Identifier et enregistrer toutes les portes AVANT de créer les collisions
+            const doorMeshes = [];
+            collegeModel.traverse((child) => {
+                if (child.isMesh) {
+                    const nameLower = (child.name || '').toLowerCase();
+                    const isDoor = child.name && (nameLower.includes('door') || nameLower.includes('porte'));
+
+                    if (isDoor) {
+                        const bbox = new THREE.Box3().setFromObject(child);
+                        const size = new THREE.Vector3();
+                        const center = new THREE.Vector3();
+                        bbox.getSize(size);
+                        bbox.getCenter(center);
+
+                        // Enregistrer la porte avec une zone très large
+                        addDoor(child.name, center.x, 1.5, center.z, size.x * 5, 3, size.z * 5);
+                        console.log(`🚪 Porte enregistrée: ${child.name} à (${center.x.toFixed(1)}, ${center.z.toFixed(1)})`);
+                        doorMeshes.push(child);
+                    }
+                }
+            });
+
+            console.log(`✓ ${doorMeshes.length} portes enregistrées avant création des collisions`);
+
+            // DEUXIÈME PASSE : Appliquer les matériaux et créer les collisions
             collegeModel.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -250,6 +275,7 @@ function createCollege() {
                     const nameLower = (child.name || '').toLowerCase();
                     const isSol = nameLower.includes('sol') || nameLower.includes('parking') ||
                                   nameLower.includes('ground') || nameLower.includes('floor');
+                    const isDoor = doorMeshes.includes(child);
 
                     if (isSol) {
                         // Sol : asphalte gris foncé avec texture
@@ -261,6 +287,19 @@ function createCollege() {
                         });
                         child.material = newMaterial;
                         console.log(`✓ Texture asphalte sur: ${child.name}`);
+                    } else if (isDoor) {
+                        // PORTES : matériau vert semi-transparent
+                        const doorMaterial = new THREE.MeshStandardMaterial({
+                            color: 0x00ff00,        // Vert vif
+                            transparent: true,
+                            opacity: 0.6,           // Semi-transparent
+                            emissive: 0x00aa00,     // Légère émission verte
+                            emissiveIntensity: 0.3,
+                            roughness: 0.5,
+                            metalness: 0.1
+                        });
+                        child.material = doorMaterial;
+                        console.log(`🚪 Matériau porte appliqué sur: ${child.name}`);
                     } else {
                         // Vérifier si le mesh a des coordonnées UV
                         const hasUV = child.geometry && child.geometry.attributes.uv;
@@ -294,19 +333,27 @@ function createCollege() {
                         });
                         child.material = newMaterial;
                         console.log(`✓ Texture brique sur: ${child.name}`);
+                    }
 
-                        // RÉACTIVER LES COLLISIONS - Système simple avec murs invisibles
+                    // RÉACTIVER LES COLLISIONS - Système simple avec murs invisibles
+                    if (!isSol) {
                         const bbox = new THREE.Box3().setFromObject(child);
                         const size = new THREE.Vector3();
                         const center = new THREE.Vector3();
                         bbox.getSize(size);
                         bbox.getCenter(center);
 
-                        // Créer une collision simple au niveau du sol (hauteur de 3m)
-                        // Agrandir légèrement les collisions pour éviter de rentrer dans les murs
-                        if (size.x > 2 && size.z > 2) {
-                            addCollisionBox(center.x, 1.5, center.z, size.x * 1.1, 3, size.z * 1.1);
-                            console.log(`✓ Collision créée: ${child.name} à (${center.x.toFixed(1)}, ${center.z.toFixed(1)}) - taille ${(size.x * 1.1).toFixed(1)}x${(size.z * 1.1).toFixed(1)}`);
+                        if (isDoor) {
+                            // C'est une porte : déjà enregistrée dans la première passe
+                            // NE PAS créer de collision pour les portes !
+                            console.log(`🚪 Porte (matériau appliqué): ${child.name}`)
+                        } else {
+                            // Créer une collision simple au niveau du sol (hauteur de 3m)
+                            // Tous les murs ont une collision - on gérera les portes dans checkCollision()
+                            if (size.x > 2 && size.z > 2) {
+                                addCollisionBox(center.x, 1.5, center.z, size.x * 1.1, 3, size.z * 1.1);
+                                console.log(`✓ Collision créée: ${child.name} à (${center.x.toFixed(1)}, ${center.z.toFixed(1)}) - taille ${(size.x * 1.1).toFixed(1)}x${(size.z * 1.1).toFixed(1)}`);
+                            }
                         }
                     }
                 }
@@ -479,6 +526,8 @@ function createCollege() {
 // ===== COLLISION SYSTEM =====
 // Array global pour stocker les objets de collision (murs, bâtiments)
 window.collisionObjects = [];
+// Array global pour stocker les portes (pas de collision, mais détection de passage)
+window.doorObjects = [];
 
 // Fonction pour ajouter un objet de collision
 function addCollisionBox(x, y, z, width, height, depth) {
@@ -488,11 +537,53 @@ function addCollisionBox(x, y, z, width, height, depth) {
     });
 }
 
+// Fonction pour ajouter une porte (zone de détection sans collision)
+function addDoor(name, x, y, z, width, height, depth) {
+    const door = {
+        name: name,
+        min: new THREE.Vector3(x - width / 2, y - height / 2, z - depth / 2),
+        max: new THREE.Vector3(x + width / 2, y + height / 2, z + depth / 2),
+        hasPlayerPassed: false // Pour éviter de logger plusieurs fois
+    };
+    window.doorObjects.push(door);
+    console.log(`🚪 [CRÉATION PORTE] ${name}`);
+    console.log(`   Centre: (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
+    console.log(`   Taille: ${width.toFixed(2)} x ${height.toFixed(2)} x ${depth.toFixed(2)}`);
+    console.log(`   Min: (${door.min.x.toFixed(2)}, ${door.min.y.toFixed(2)}, ${door.min.z.toFixed(2)})`);
+    console.log(`   Max: (${door.max.x.toFixed(2)}, ${door.max.y.toFixed(2)}, ${door.max.z.toFixed(2)})`);
+}
+
 // Les collisions seront calculées automatiquement depuis le modèle GLB du collège
 // TODO: Ajouter des collisions basées sur la géométrie du modèle chargé
 
+// Fonction auxiliaire pour vérifier si le joueur est dans une zone de porte
+function isPlayerInDoor(playerPos, radius) {
+    for (const door of window.doorObjects) {
+        if (!door) continue;
+
+        const isInDoor =
+            playerPos.x + radius > door.min.x &&
+            playerPos.x - radius < door.max.x &&
+            playerPos.y + radius > door.min.y &&
+            playerPos.y - radius < door.max.y &&
+            playerPos.z + radius > door.min.z &&
+            playerPos.z - radius < door.max.z;
+
+        if (isInDoor) {
+            console.log(`✅ Joueur dans la zone de porte ${door.name} - collisions désactivées`);
+            return true;
+        }
+    }
+    return false;
+}
+
 // Fonction pour vérifier la collision et pousser le joueur hors du mur
 function checkCollision(newPos, radius = 0.5) {
+    // Si le joueur est dans une porte, désactiver les collisions
+    if (isPlayerInDoor(newPos, radius)) {
+        return false; // Pas de collision si dans une porte
+    }
+
     for (const box of window.collisionObjects) {
         // Ignorer les collisions retirées (arbres détruits)
         if (!box) continue;
@@ -510,6 +601,11 @@ function checkCollision(newPos, radius = 0.5) {
 
 // Fonction pour pousser le joueur hors d'un mur s'il est coincé dedans
 function pushPlayerOutOfWalls(playerPos, radius = 0.5) {
+    // Si le joueur est dans une porte, ne pas le pousser
+    if (isPlayerInDoor(playerPos, radius)) {
+        return;
+    }
+
     for (const box of window.collisionObjects) {
         if (!box) continue;
 
@@ -543,6 +639,42 @@ function pushPlayerOutOfWalls(playerPos, radius = 0.5) {
                     playerPos.z = box.max.z + radius + 0.1;
                 }
             }
+        }
+    }
+}
+
+// Fonction pour détecter le passage du joueur par une porte
+function checkDoorPassage(playerPos, radius) {
+    console.log(`🔍 [Door Check] Position joueur: (${playerPos.x.toFixed(2)}, ${playerPos.y.toFixed(2)}, ${playerPos.z.toFixed(2)}), rayon: ${radius}`);
+    console.log(`🔍 [Door Check] Nombre de portes: ${window.doorObjects.length}`);
+
+    for (let i = 0; i < window.doorObjects.length; i++) {
+        const door = window.doorObjects[i];
+        if (!door) continue;
+
+        console.log(`🚪 [Porte ${i}] ${door.name}`);
+        console.log(`   - Min: (${door.min.x.toFixed(2)}, ${door.min.y.toFixed(2)}, ${door.min.z.toFixed(2)})`);
+        console.log(`   - Max: (${door.max.x.toFixed(2)}, ${door.max.y.toFixed(2)}, ${door.max.z.toFixed(2)})`);
+
+        // Vérifier si le joueur est dans la zone de la porte (AABB simple)
+        const checkX = playerPos.x + radius > door.min.x && playerPos.x - radius < door.max.x;
+        const checkY = playerPos.y + radius > door.min.y && playerPos.y - radius < door.max.y;
+        const checkZ = playerPos.z + radius > door.min.z && playerPos.z - radius < door.max.z;
+
+        console.log(`   - Check X: ${checkX} (${(playerPos.x - radius).toFixed(2)} < ${door.max.x.toFixed(2)} && ${(playerPos.x + radius).toFixed(2)} > ${door.min.x.toFixed(2)})`);
+        console.log(`   - Check Y: ${checkY} (${(playerPos.y - radius).toFixed(2)} < ${door.max.y.toFixed(2)} && ${(playerPos.y + radius).toFixed(2)} > ${door.min.y.toFixed(2)})`);
+        console.log(`   - Check Z: ${checkZ} (${(playerPos.z - radius).toFixed(2)} < ${door.max.z.toFixed(2)} && ${(playerPos.z + radius).toFixed(2)} > ${door.min.z.toFixed(2)})`);
+
+        const isInDoor = checkX && checkY && checkZ;
+        console.log(`   - Résultat: ${isInDoor ? '✅ DANS LA PORTE' : '❌ PAS DANS LA PORTE'}`);
+
+        if (isInDoor && !door.hasPlayerPassed) {
+            console.log(`🚪 ✅ ✅ ✅ Entrée par la porte ${door.name}`);
+            door.hasPlayerPassed = true;
+        } else if (!isInDoor && door.hasPlayerPassed) {
+            // Réinitialiser quand le joueur sort de la zone
+            console.log(`🚪 Joueur sorti de la porte ${door.name}`);
+            door.hasPlayerPassed = false;
         }
     }
 }
@@ -1146,7 +1278,7 @@ document.addEventListener('keyup', (e) => keys[e.code] = false);
 
 document.addEventListener('mousemove', (e) => {
     if (!isPointerLocked) return;
-    mouseX += e.movementX * 0.002;
+    mouseX -= e.movementX * 0.002;
     mouseY -= e.movementY * 0.002;
     mouseY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, mouseY));
 });
@@ -1498,6 +1630,9 @@ function animate() {
 
         // Pousser le joueur hors du mur s'il est coincé
         pushPlayerOutOfWalls(player.position, 0.8);
+
+        // Détecter le passage par les portes
+        checkDoorPassage(player.position, 0.8);
 
         // Gravity and jump
         if (isOnGround) {
