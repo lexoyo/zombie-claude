@@ -342,9 +342,9 @@ textureLoader.load(
 );
 
 function createCollege() {
-    // Charger le modèle 3D du collège
+    // Charger le modèle 3D du collège avec les murs d'enceinte
     gltfLoader.load(
-        './college_revesz_long_simplified.glb',
+        './college_revesz_long_with_wall.glb',
         // onLoad
         (gltf) => {
             console.log('Modèle du collège chargé avec succès');
@@ -460,7 +460,17 @@ function createCollege() {
                         } else {
                             // Créer une collision simple au niveau du sol (hauteur de 3m)
                             // Tous les murs ont une collision - on gérera les portes dans checkCollision()
-                            if (size.x > 2 && size.z > 2) {
+
+                            // Vérifier si c'est un mur extérieur (Wall_North, Wall_South, etc.)
+                            const isWall = nameLower.includes('wall');
+
+                            // Pour les murs extérieurs, on accepte les objets longs et fins
+                            // Pour les bâtiments, on garde la condition originale
+                            const shouldCreateCollision = isWall ?
+                                (size.x > 2 || size.z > 2) : // Mur extérieur : au moins une dimension > 2
+                                (size.x > 2 && size.z > 2);  // Bâtiment : les deux dimensions > 2
+
+                            if (shouldCreateCollision) {
                                 addCollisionBox(center.x, 1.5, center.z, size.x * 1.1, 3, size.z * 1.1);
                                 console.log(`✓ Collision créée: ${child.name} à (${center.x.toFixed(1)}, ${center.z.toFixed(1)}) - taille ${(size.x * 1.1).toFixed(1)}x${(size.z * 1.1).toFixed(1)}`);
                             }
