@@ -34,8 +34,18 @@ const gameState = {
 
 // ===== SCENE SETUP =====
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
+
+// Couleurs pour le cycle jour/nuit
+const daySkyColor = new THREE.Color(0x87ceeb);      // Bleu ciel jour
+const nightSkyColor = new THREE.Color(0x0a0a14);    // Noir-bleu très sombre la nuit
+const currentSkyColor = daySkyColor.clone();        // Commencer en jour
+
+scene.background = currentSkyColor.clone();
 scene.fog = new THREE.Fog(0x87ceeb, 50, 150);
+
+// Temps pour le cycle (5 minutes = 300 secondes)
+const dayNightCycleDuration = 300000; // en millisecondes
+const gameStartTime = Date.now();
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -45,9 +55,11 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 // ===== LIGHTING =====
+// Lumière ambiante (varie avec le cycle jour/nuit)
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
 
+// Lumière directionnelle (soleil/lune, varie avec le cycle)
 const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
 sunLight.position.set(50, 100, 50);
 sunLight.castShadow = true;
@@ -58,6 +70,11 @@ sunLight.shadow.camera.bottom = -100;
 sunLight.shadow.mapSize.width = 2048;
 sunLight.shadow.mapSize.height = 2048;
 scene.add(sunLight);
+
+// Lumière d'éclair (sera activée aléatoirement la nuit)
+const lightningLight = new THREE.PointLight(0xaaccff, 0, 200);
+lightningLight.position.set(0, 80, 0);
+scene.add(lightningLight);
 
 // ===== GLTF LOADER =====
 const gltfLoader = new GLTFLoader();
@@ -75,6 +92,7 @@ const dieSound = new THREE.Audio(audioListener);
 const treeSound = new THREE.Audio(audioListener);
 const zombieDieSound = new THREE.Audio(audioListener);
 const walkSound = new THREE.Audio(audioListener);
+const powerupSound = new THREE.Audio(audioListener);
 
 // Buffers pour les sons d'armes (pour créer plusieurs instances)
 let flamethrowerBuffer = null;
@@ -144,6 +162,14 @@ audioLoader.load('./sounds/walk.wav', (buffer) => {
     console.log('✓ Son walk.wav chargé');
 }, undefined, (error) => {
     console.error('Erreur de chargement de walk.wav:', error);
+});
+
+audioLoader.load('./sounds/boule.wav', (buffer) => {
+    powerupSound.setBuffer(buffer);
+    powerupSound.setVolume(0.6);
+    console.log('✓ Son boule.wav chargé');
+}, undefined, (error) => {
+    console.error('Erreur de chargement de boule.wav:', error);
 });
 
 // Fonction pour jouer un son d'arme (crée une nouvelle instance à chaque fois)
@@ -479,6 +505,29 @@ function createCollege() {
                 }
             });
 
+            // TROISIÈME PASSE : Ajouter des lumières dans les salles
+            collegeModel.traverse((child) => {
+                if (child.isMesh) {
+                    const nameLower = (child.name || '').toLowerCase();
+                    const isRoom = nameLower.includes('room_');
+
+                    if (isRoom) {
+                        // Calculer le centre de la salle
+                        const bbox = new THREE.Box3().setFromObject(child);
+                        const center = new THREE.Vector3();
+                        bbox.getCenter(center);
+
+                        // Créer une lumière ponctuelle au-dessus de la salle
+                        const roomLight = new THREE.PointLight(0xffffdd, 2.5, 35);
+                        roomLight.position.set(center.x, center.y + 4, center.z);
+                        roomLight.castShadow = false; // Pas d'ombre pour les lumières intérieures (performance)
+                        scene.add(roomLight);
+
+                        console.log(`💡 Lumière ajoutée dans: ${child.name}`);
+                    }
+                }
+            });
+
             // Position du modèle (origine déjà bien placée)
             collegeModel.position.set(0, 0, 0);
             scene.add(collegeModel);
@@ -765,35 +814,23 @@ function pushPlayerOutOfWalls(playerPos, radius = 0.5) {
 
 // Fonction pour détecter le passage du joueur par une porte
 function checkDoorPassage(playerPos, radius) {
-    console.log(`🔍 [Door Check] Position joueur: (${playerPos.x.toFixed(2)}, ${playerPos.y.toFixed(2)}, ${playerPos.z.toFixed(2)}), rayon: ${radius}`);
-    console.log(`🔍 [Door Check] Nombre de portes: ${window.doorObjects.length}`);
-
     for (let i = 0; i < window.doorObjects.length; i++) {
         const door = window.doorObjects[i];
         if (!door) continue;
 
-        console.log(`🚪 [Porte ${i}] ${door.name}`);
-        console.log(`   - Min: (${door.min.x.toFixed(2)}, ${door.min.y.toFixed(2)}, ${door.min.z.toFixed(2)})`);
-        console.log(`   - Max: (${door.max.x.toFixed(2)}, ${door.max.y.toFixed(2)}, ${door.max.z.toFixed(2)})`);
-
         // Vérifier si le joueur est dans la zone de la porte (AABB simple)
-        const checkX = playerPos.x + radius > door.min.x && playerPos.x - radius < door.max.x;
-        const checkY = playerPos.y + radius > door.min.y && playerPos.y - radius < door.max.y;
-        const checkZ = playerPos.z + radius > door.min.z && playerPos.z - radius < door.max.z;
-
-        console.log(`   - Check X: ${checkX} (${(playerPos.x - radius).toFixed(2)} < ${door.max.x.toFixed(2)} && ${(playerPos.x + radius).toFixed(2)} > ${door.min.x.toFixed(2)})`);
-        console.log(`   - Check Y: ${checkY} (${(playerPos.y - radius).toFixed(2)} < ${door.max.y.toFixed(2)} && ${(playerPos.y + radius).toFixed(2)} > ${door.min.y.toFixed(2)})`);
-        console.log(`   - Check Z: ${checkZ} (${(playerPos.z - radius).toFixed(2)} < ${door.max.z.toFixed(2)} && ${(playerPos.z + radius).toFixed(2)} > ${door.min.z.toFixed(2)})`);
-
-        const isInDoor = checkX && checkY && checkZ;
-        console.log(`   - Résultat: ${isInDoor ? '✅ DANS LA PORTE' : '❌ PAS DANS LA PORTE'}`);
+        const isInDoor =
+            playerPos.x + radius > door.min.x &&
+            playerPos.x - radius < door.max.x &&
+            playerPos.y + radius > door.min.y &&
+            playerPos.y - radius < door.max.y &&
+            playerPos.z + radius > door.min.z &&
+            playerPos.z - radius < door.max.z;
 
         if (isInDoor && !door.hasPlayerPassed) {
-            console.log(`🚪 ✅ ✅ ✅ Entrée par la porte ${door.name}`);
+            console.log(`🚪 Passage par la porte ${door.name}`);
             door.hasPlayerPassed = true;
         } else if (!isInDoor && door.hasPlayerPassed) {
-            // Réinitialiser quand le joueur sort de la zone
-            console.log(`🚪 Joueur sorti de la porte ${door.name}`);
             door.hasPlayerPassed = false;
         }
     }
@@ -1815,6 +1852,41 @@ function animate() {
         player.position.x = Math.max(-100, Math.min(100, player.position.x));
         player.position.z = Math.max(-100, Math.min(100, player.position.z));
 
+        // ===== CYCLE JOUR/NUIT =====
+        const elapsedTime = Date.now() - gameStartTime;
+        const cycleProgress = (elapsedTime % dayNightCycleDuration) / dayNightCycleDuration;
+
+        // Calculer le facteur de transition (0 = jour complet, 1 = nuit complète)
+        // Utiliser sin pour une transition douce : 0 -> 1 -> 0
+        const nightFactor = Math.abs(Math.sin(cycleProgress * Math.PI));
+
+        // Interpoler les couleurs du ciel
+        currentSkyColor.lerpColors(daySkyColor, nightSkyColor, nightFactor);
+        scene.background.copy(currentSkyColor);
+
+        // Mettre à jour le brouillard
+        const fogColor = new THREE.Color().lerpColors(
+            new THREE.Color(0x87ceeb), // Jour : bleu ciel
+            new THREE.Color(0x0a0a14), // Nuit : noir-bleu très sombre
+            nightFactor
+        );
+        scene.fog.color.copy(fogColor);
+
+        // Ajuster les lumières - BEAUCOUP plus sombre la nuit
+        ambientLight.intensity = 0.6 - (nightFactor * 0.5); // 0.6 jour -> 0.1 nuit
+        ambientLight.color.setRGB(
+            1.0 - (nightFactor * 0.85),  // Rouge diminue beaucoup la nuit
+            1.0 - (nightFactor * 0.85),  // Vert diminue beaucoup la nuit
+            1.0 - (nightFactor * 0.6)    // Bleu diminue moins (teinte bleutée)
+        );
+
+        sunLight.intensity = 0.8 - (nightFactor * 0.65); // 0.8 jour -> 0.15 nuit
+        sunLight.color.setRGB(
+            1.0 - (nightFactor * 0.7),
+            1.0 - (nightFactor * 0.7),
+            1.0 - (nightFactor * 0.3)
+        );
+
         // Update zombies
         zombies.forEach(zombie => zombie.update());
 
@@ -1849,6 +1921,33 @@ function animate() {
             });
         }
 
+        // Système d'éclairs aléatoires (seulement la nuit)
+        if (nightFactor > 0.5 && Math.random() < 0.01) { // Éclairs seulement quand nightFactor > 0.5
+            // Flash d'éclair très intense
+            lightningLight.intensity = 8;
+            lightningLight.position.set(
+                (Math.random() - 0.5) * 100,
+                60 + Math.random() * 40,
+                (Math.random() - 0.5) * 100
+            );
+
+            // Sauvegarder la couleur actuelle du ciel
+            const currentBg = scene.background.clone();
+
+            // Effet de flash sur le background aussi
+            scene.background.set(0x6a6a8e); // Flash lumineux
+
+            // Diminuer progressivement l'intensité
+            setTimeout(() => {
+                lightningLight.intensity = 4;
+                scene.background.copy(currentBg); // Restaurer la couleur actuelle
+            }, 50);
+            setTimeout(() => { lightningLight.intensity = 1; }, 100);
+            setTimeout(() => { lightningLight.intensity = 0; }, 200);
+
+            console.log('⚡ Éclair !');
+        }
+
         // Vérifier collision avec power-ups
         if (window.powerups) {
             for (let i = window.powerups.length - 1; i >= 0; i--) {
@@ -1858,6 +1957,11 @@ function animate() {
             if (distance < 2) {
                 // Power-up collecté !
                 console.log('Power-up collecté ! Élimination des zombies proches...');
+
+                // Jouer le son de collecte
+                if (powerupSound.buffer && !powerupSound.isPlaying) {
+                    powerupSound.play();
+                }
 
                 // Retirer le power-up
                 scene.remove(powerup);
