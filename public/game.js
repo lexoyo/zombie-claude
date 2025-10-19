@@ -65,6 +65,116 @@ const gltfLoader = new GLTFLoader();
 // ===== TEXTURE LOADER =====
 const textureLoader = new THREE.TextureLoader();
 
+// ===== AUDIO LOADER =====
+const audioListener = new THREE.AudioListener();
+camera.add(audioListener);
+
+// Créer les sons
+const touchSound = new THREE.Audio(audioListener);
+const dieSound = new THREE.Audio(audioListener);
+const treeSound = new THREE.Audio(audioListener);
+const zombieDieSound = new THREE.Audio(audioListener);
+const walkSound = new THREE.Audio(audioListener);
+
+// Buffers pour les sons d'armes (pour créer plusieurs instances)
+let flamethrowerBuffer = null;
+let rifleBuffer = null;
+let pistolBuffer = null;
+
+// Charger les fichiers audio
+const audioLoader = new THREE.AudioLoader();
+
+audioLoader.load('./sounds/touch.wav', (buffer) => {
+    touchSound.setBuffer(buffer);
+    touchSound.setVolume(0.5);
+    console.log('✓ Son touch.wav chargé');
+}, undefined, (error) => {
+    console.error('Erreur de chargement de touch.wav:', error);
+});
+
+audioLoader.load('./sounds/die.wav', (buffer) => {
+    dieSound.setBuffer(buffer);
+    dieSound.setVolume(0.7);
+    console.log('✓ Son die.wav chargé');
+}, undefined, (error) => {
+    console.error('Erreur de chargement de die.wav:', error);
+});
+
+audioLoader.load('./sounds/flamme.flac', (buffer) => {
+    flamethrowerBuffer = buffer;
+    console.log('✓ Son flamme.flac chargé');
+}, undefined, (error) => {
+    console.error('Erreur de chargement de flamme.flac:', error);
+});
+
+audioLoader.load('./sounds/fusil.wav', (buffer) => {
+    rifleBuffer = buffer;
+    console.log('✓ Son fusil.wav chargé');
+}, undefined, (error) => {
+    console.error('Erreur de chargement de fusil.wav:', error);
+});
+
+audioLoader.load('./sounds/pistolet.wav', (buffer) => {
+    pistolBuffer = buffer;
+    console.log('✓ Son pistolet.wav chargé');
+}, undefined, (error) => {
+    console.error('Erreur de chargement de pistolet.wav:', error);
+});
+
+audioLoader.load('./sounds/arbre.wav', (buffer) => {
+    treeSound.setBuffer(buffer);
+    treeSound.setVolume(0.5);
+    console.log('✓ Son arbre.wav chargé');
+}, undefined, (error) => {
+    console.error('Erreur de chargement de arbre.wav:', error);
+});
+
+audioLoader.load('./sounds/zombie-die.wav', (buffer) => {
+    zombieDieSound.setBuffer(buffer);
+    zombieDieSound.setVolume(0.4);
+    console.log('✓ Son zombie-die.wav chargé');
+}, undefined, (error) => {
+    console.error('Erreur de chargement de zombie-die.wav:', error);
+});
+
+audioLoader.load('./sounds/walk.wav', (buffer) => {
+    walkSound.setBuffer(buffer);
+    walkSound.setVolume(0.3);
+    walkSound.setLoop(true); // Le son de marche boucle
+    console.log('✓ Son walk.wav chargé');
+}, undefined, (error) => {
+    console.error('Erreur de chargement de walk.wav:', error);
+});
+
+// Fonction pour jouer un son d'arme (crée une nouvelle instance à chaque fois)
+function playWeaponSound(weaponType) {
+    let buffer = null;
+    let volume = 0.5;
+
+    if (weaponType === 'rifle' && rifleBuffer) {
+        buffer = rifleBuffer;
+        volume = 0.6;
+    } else if (weaponType === 'pistol' && pistolBuffer) {
+        buffer = pistolBuffer;
+        volume = 0.5;
+    } else if (weaponType === 'flamethrower' && flamethrowerBuffer) {
+        buffer = flamethrowerBuffer;
+        volume = 0.4;
+    }
+
+    if (buffer) {
+        const sound = new THREE.Audio(audioListener);
+        sound.setBuffer(buffer);
+        sound.setVolume(volume);
+        sound.play();
+
+        // Nettoyer la mémoire une fois le son terminé
+        sound.onEnded = () => {
+            sound.disconnect();
+        };
+    }
+}
+
 // ===== COLLEGE ENVIRONMENT =====
 let collegeModel = null;
 
@@ -1222,6 +1332,11 @@ class Zombie {
             this.stopBurning();
         }
 
+        // Jouer le son de mort du zombie
+        if (zombieDieSound.buffer) {
+            zombieDieSound.play();
+        }
+
         scene.remove(this.mesh);
         const index = zombies.indexOf(this);
         if (index > -1) {
@@ -1334,6 +1449,9 @@ function shoot() {
 
     gameState.canShoot = false;
     setTimeout(() => gameState.canShoot = true, CONFIG.weapon.cooldown);
+
+    // Jouer le son de l'arme (nouvelle instance à chaque tir)
+    playWeaponSound(gameState.currentWeapon);
 
     // Animation de recul de l'arme (plus réaliste)
     const originalPosZ = currentWeaponMesh.position.z;
@@ -1508,6 +1626,11 @@ function shoot() {
                 // Détruire l'arbre
                 treeHit.tree.userData.isDestroyed = true;
 
+                // Jouer le son de l'arbre qui tombe
+                if (treeSound.buffer) {
+                    treeSound.play();
+                }
+
                 // Retirer la collision de l'arbre
                 if (treeHit.tree.userData.collisionIndex !== undefined) {
                     window.collisionObjects[treeHit.tree.userData.collisionIndex] = null;
@@ -1559,6 +1682,11 @@ function damagePlayer(damage) {
     gameState.playerHealth -= damage;
     updateUI();
 
+    // Jouer le son de coup
+    if (touchSound.buffer && !touchSound.isPlaying) {
+        touchSound.play();
+    }
+
     // Effet visuel de dégâts
     renderer.domElement.style.filter = 'brightness(0.5)';
     setTimeout(() => {
@@ -1572,6 +1700,12 @@ function damagePlayer(damage) {
 
 function gameOver() {
     gameState.isGameOver = true;
+
+    // Jouer le son de mort
+    if (dieSound.buffer) {
+        dieSound.play();
+    }
+
     document.getElementById('game-over').style.display = 'block';
     document.exitPointerLock();
 }
@@ -1599,7 +1733,14 @@ function animate() {
         if (keys['ArrowLeft']) moveVector.x -= 1;
         if (keys['ArrowRight']) moveVector.x += 1;
 
-        if (moveVector.length() > 0) {
+        const isMoving = moveVector.length() > 0;
+
+        if (isMoving) {
+            // Jouer le son de marche si le joueur est au sol et en mouvement
+            if (isOnGround && walkSound.buffer && !walkSound.isPlaying) {
+                walkSound.play();
+            }
+
             moveVector.normalize();
             moveVector.applyQuaternion(player.quaternion);
             const movement = moveVector.multiplyScalar(CONFIG.player.speed);
@@ -1625,6 +1766,11 @@ function animate() {
                 if (!checkCollision(newPosZ, collisionRadius)) {
                     player.position.z = newPosZ.z;
                 }
+            }
+        } else {
+            // Arrêter le son de marche si le joueur ne bouge plus
+            if (walkSound.isPlaying) {
+                walkSound.stop();
             }
         }
 
